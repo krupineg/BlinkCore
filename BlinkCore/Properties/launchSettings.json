@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "BlinkCore": {
+      "commandName": "Project",
+      "commandLineArgs": "debug"
+    }
+  }
+}

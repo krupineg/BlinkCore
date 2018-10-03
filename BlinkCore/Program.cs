@@ -1,7 +1,6 @@
 ﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using WiringPiNETCore;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace BlinkCore
 {
@@ -12,64 +11,77 @@ namespace BlinkCore
         static void Main(string[] args)
         {
             Hola();
-            Initialize();
-            SetMode();
+            var core = args.Contains("debug") ? (IGpioCore)new PseudoGpio(): new GpioCore();
+            var spin = new PinProvider(core)
+                .Get(Pin)
+                .AsOutput()
+                .AsPhysicalElement()
+                .SpinEach(1000);
 
-            using (RunBlinks())
+            var sequence = new PinProvider(core)
+                .Get(Pin)
+                .AsInput()
+                .AsPhysicalElement()
+                .Observe(50,
+                    timestamped =>
+                        Console.WriteLine(string.Format("received {0} ts: {1}", timestamped.Value,
+                            timestamped.Timestamp)));
+            using (spin)
             {
                 Console.ReadKey();
             }
         }
-
-        private class DisposableBlink : IDisposable
-        {
-            private readonly CancellationTokenSource _cancellationTokenSource;
-            private readonly Task _task;
-
-            public DisposableBlink()
-            {
-                _cancellationTokenSource = new CancellationTokenSource();
-                _task = Task.Factory.StartNew(() =>
-                {
-                    while (!_cancellationTokenSource.Token.IsCancellationRequested)
-                    {
-                        GPIO.digitalWrite(Pin, (int)GPIO.GPIOpinvalue.High);
-                        Thread.Sleep(1000);
-                        GPIO.digitalWrite(Pin, (int)GPIO.GPIOpinvalue.Low);
-                        Thread.Sleep(1000);
-                    }
-                }, TaskCreationOptions.LongRunning);
-            }
-
-            public void Dispose()
-            {
-                _cancellationTokenSource.Cancel();
-                _task.Wait(2000);
-            }
-        }
-
-        private static IDisposable RunBlinks()
-        {
-            return new DisposableBlink();
-        }
-
-
+        
         private static void Hola()
         {
             Console.WriteLine("Let's blink");
         }
+    }
 
-        private static void SetMode()
+    internal class PseudoGpio : IGpioCore
+    {
+        readonly Dictionary<int, int> _dictionary = new Dictionary<int, int>();
+        
+        public void Input(int pin)
         {
-            GPIO.pinMode(Pin, (int)GPIO.GPIOpinmode.Output);
+
         }
 
-        private static void Initialize()
+        public void Output(int pin)
         {
-            var setup = Init.WiringPiSetup();
-            Console.WriteLine($"setup: {setup}");
-            var setupGpio = Init.WiringPiSetupGpio();
-            Console.WriteLine($"setupGpio: {setupGpio}");
+        }
+
+        public void Write(int pin, int value)
+        {
+            _dictionary[pin] = value;
+
+            Console.WriteLine(string.Format("sent: {0} on pin {1}", value, pin));
+        }
+
+        public int Read(int pin)
+        {
+            return _dictionary[pin];
+        }
+
+        private class PseudoElement : IInputPhysicalElement, IPhysicalElement
+        {
+            private int _value = -1;
+
+            public int Read()
+            {
+                return _value;
+            }
+
+            public void On()
+            {
+                _value = 1;
+            }
+
+            public void Off()
+            {
+                _value = 0;
+                Console.WriteLine("off");
+            }
         }
     }
 }
